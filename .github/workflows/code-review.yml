@@ -34,8 +34,8 @@ jobs:
             2. 변경된 각 파일의 전체 내용을 Read로 확인
             3. 변경된 코드가 호출하거나 의존하는 관련 파일도 Grep/Glob으로 탐색
             4. code_review_guide.md의 기준에 따라 리뷰 수행
-            5. 반드시 MCP 도구(create_pull_request_review, create_review_comment 등)를 사용하여 PR에 직접 리뷰 코멘트를 작성해라. 텍스트 출력만 하지 마라.
-            6. 전체 요약은 create_pull_request_review 도구의 body에 작성해라.
+            5. code_review_guide.md의 코멘트 형식과 요약 형식에 맞게 리뷰 결과를 작성해라.
 
+          use_sticky_comment: true
           show_full_output: true
           claude_args: "--model claude-sonnet-4-5-20250929 --max-turns 30"
