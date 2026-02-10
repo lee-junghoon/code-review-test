@@ -1,36 +1,47 @@
 import json
-import re
 import sys
 
 raw = open('/tmp/review_raw.txt').read()
 
-# ```json 이후의 내용만 추출 (closing ```이 없어도 동작)
-if '```json' in raw:
-    text = raw.split('```json', 1)[1]
-    # closing ``` 가 있으면 그 전까지만
-    if '```' in text:
-        text = text.split('```', 1)[0]
-elif '```' in raw:
-    text = raw.split('```', 1)[1]
-    if '```' in text:
-        text = text.split('```', 1)[0]
-else:
-    text = raw
+# 첫 번째 { 부터 중괄호 매칭으로 JSON 추출
+start = raw.find('{')
+if start == -1:
+    print('ERROR: No { found in Claude output', file=sys.stderr)
+    sys.exit(1)
 
-# 첫 번째 { 부터 마지막 } 까지 추출
-start = text.find('{')
-end = text.rfind('}')
-if start == -1 or end == -1:
-    # raw 전체에서 다시 시도
-    start = raw.find('{')
-    end = raw.rfind('}')
-    if start == -1 or end == -1:
-        print('ERROR: No JSON found in Claude output', file=sys.stderr)
-        print('Raw output (first 500):', raw[:500], file=sys.stderr)
-        sys.exit(1)
-    json_str = raw[start:end+1]
-else:
-    json_str = text[start:end+1]
+depth = 0
+end = -1
+in_string = False
+escape = False
+
+for i in range(start, len(raw)):
+    c = raw[i]
+    if escape:
+        escape = False
+        continue
+    if c == '\\':
+        if in_string:
+            escape = True
+        continue
+    if c == '"' and not escape:
+        in_string = not in_string
+        continue
+    if in_string:
+        continue
+    if c == '{':
+        depth += 1
+    elif c == '}':
+        depth -= 1
+        if depth == 0:
+            end = i
+            break
+
+if end == -1:
+    print('ERROR: Unmatched braces in Claude output', file=sys.stderr)
+    print('Raw output (first 500):', raw[:500], file=sys.stderr)
+    sys.exit(1)
+
+json_str = raw[start:end+1]
 
 try:
     data = json.loads(json_str)
