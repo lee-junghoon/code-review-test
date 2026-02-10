@@ -33,6 +33,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
+          PR_DIFF=$(cat /tmp/pr_diff.txt)
           claude --model claude-sonnet-4-5-20250929 --max-turns 10 --print \
             "당신은 코드 리뷰어입니다.
 
@@ -51,32 +52,13 @@ jobs:
           }
 
           === PR DIFF ===
-          $(cat /tmp/pr_diff.txt)
+          ${PR_DIFF}
           === END DIFF ===" > /tmp/review_raw.txt
 
-          # Python으로 안정적으로 JSON 추출
-          python3 -c "
-          import json, re, sys
-          raw = open('/tmp/review_raw.txt').read()
-          # ```json ... ``` 블록 추출 시도
-          m = re.search(r'\`\`\`json\s*(.*?)\`\`\`', raw, re.DOTALL)
-          if not m:
-              m = re.search(r'\`\`\`\s*(.*?)\`\`\`', raw, re.DOTALL)
-          if m:
-              text = m.group(1)
-          else:
-              text = raw
-          # 첫 번째 { 부터 마지막 } 까지 추출
-          start = text.find('{')
-          end = text.rfind('}')
-          if start == -1 or end == -1:
-              print('ERROR: No JSON found', file=sys.stderr)
-              sys.exit(1)
-          json_str = text[start:end+1]
-          data = json.loads(json_str)
-          json.dump(data, open('/tmp/review.json','w'), ensure_ascii=False)
-          print('JSON extracted successfully')
-          "
+          echo "=== Raw output ==="
+          head -5 /tmp/review_raw.txt
+
+          python3 .github/scripts/extract_json.py
 
           echo "=== Extracted JSON ==="
           cat /tmp/review.json
@@ -89,13 +71,9 @@ jobs:
           COMMIT_SHA=${{ github.event.pull_request.head.sha }}
           REPO=${{ github.repository }}
 
-          # summary 추출
           SUMMARY=$(jq -r '.summary' /tmp/review.json)
-
-          # comments 배열을 GitHub API 형식으로 변환
           COMMENTS=$(jq -c '[.comments[] | {path: .path, line: .line, body: .body}]' /tmp/review.json)
 
-          # PR review 생성 (인라인 코멘트 + 요약)
           jq -n \
             --arg commit_id "$COMMIT_SHA" \
             --arg body "$SUMMARY" \
