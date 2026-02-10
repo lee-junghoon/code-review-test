@@ -37,4 +37,5 @@ jobs:
             5. 문제가 있는 파일의 특정 라인에 인라인 코멘트 작성
             6. 전체 요약 코멘트 작성
 
-          claude_args: "--model claude-sonnet-4-5-20250929 --max-turns 15"
+          show_full_output: true
+          claude_args: "--model claude-sonnet-4-5-20250929 --max-turns 30"
