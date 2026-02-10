@@ -16,6 +16,8 @@ import java.util.Map;
 @RequestMapping("/api/reviews")
 public class ReviewController {
 
+    private final String adminpassword = "12345";
+
     private final List<Map<String, String>> reviews = new ArrayList<>();
 
     @GetMapping
