@@ -1,0 +1,40 @@
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+    branches:
+      - master-review
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+jobs:
+  code-review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          prompt: |
+            code_review_guide.md 파일을 읽고 그 기준에 따라 이 PR을 리뷰해줘.
+
+            리뷰 절차:
+            1. PR의 변경된 파일 목록과 diff를 확인
+            2. 변경된 각 파일의 전체 내용을 Read로 확인
+            3. 변경된 코드가 호출하거나 의존하는 관련 파일도 Grep/Glob으로 탐색
+            4. code_review_guide.md의 기준에 따라 리뷰 수행
+            5. 문제가 있는 파일의 특정 라인에 인라인 코멘트 작성
+            6. 전체 요약 코멘트 작성
+
+          claude_args: "--model claude-sonnet-4-5-20250929 --max-turns 15"
