@@ -26,32 +26,73 @@ jobs:
         run: npm install -g @anthropic-ai/claude-code
 
       - name: Get PR diff
-        id: diff
         run: |
           git diff origin/${{ github.event.pull_request.base.ref }}...HEAD -- '*.java' > /tmp/pr_diff.txt
-          echo "diff_file=/tmp/pr_diff.txt" >> $GITHUB_OUTPUT
 
       - name: Run AI Code Review
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          REVIEW=$(claude --model claude-sonnet-4-5-20250929 --max-turns 10 --print \
-            "당신은 코드 리뷰어입니다. 아래 지시에 따라 리뷰하세요.
+          claude --model claude-sonnet-4-5-20250929 --max-turns 10 --print \
+            "당신은 코드 리뷰어입니다.
 
-          1. 먼저 code_review_guide.md 파일을 읽고 리뷰 기준을 파악하세요.
-          2. 아래 PR diff를 리뷰하세요.
-          3. code_review_guide.md의 코멘트 형식과 요약 형식에 맞게 결과를 작성하세요.
-          4. 변경된 파일의 전체 내용도 확인하여 컨텍스트를 파악하세요.
+          [지시사항]
+          1. code_review_guide.md를 읽고 리뷰 기준을 파악하세요.
+          2. 아래 PR diff와 변경된 파일의 전체 내용을 분석하세요.
+          3. 반드시 아래 JSON 형식으로만 응답하세요. JSON 외 텍스트는 절대 포함하지 마세요.
+          4. line은 변경된 파일의 실제 라인 번호입니다.
+
+          [응답 형식 - 이 JSON만 출력하세요]
+          {
+            \"comments\": [
+              {\"path\": \"파일경로\", \"line\": 라인번호, \"body\": \"리뷰 코멘트\"}
+            ],
+            \"summary\": \"전체 요약 (code_review_guide.md 형식)\"
+          }
 
           === PR DIFF ===
           $(cat /tmp/pr_diff.txt)
-          === END DIFF ===")
+          === END DIFF ===" > /tmp/review_raw.txt
 
-          echo "$REVIEW" > /tmp/review_result.md
+          # JSON 블록 추출 (```json ... ``` 또는 순수 JSON)
+          if grep -q '```json' /tmp/review_raw.txt; then
+            sed -n '/```json/,/```/p' /tmp/review_raw.txt | sed '1d;$d' > /tmp/review.json
+          elif grep -q '```' /tmp/review_raw.txt; then
+            sed -n '/```/,/```/p' /tmp/review_raw.txt | sed '1d;$d' > /tmp/review.json
+          else
+            # 첫 번째 { 부터 마지막 } 까지 추출
+            sed -n '/^{/,/^}/p' /tmp/review_raw.txt > /tmp/review.json
+          fi
 
-      - name: Post review comment
+          echo "=== Extracted JSON ==="
+          cat /tmp/review.json
+
+      - name: Post inline review comments
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BODY=$(cat /tmp/review_result.md)
-          gh pr comment ${{ github.event.pull_request.number }} --body "$BODY"
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          COMMIT_SHA=${{ github.event.pull_request.head.sha }}
+          REPO=${{ github.repository }}
+
+          # summary 추출
+          SUMMARY=$(jq -r '.summary' /tmp/review.json)
+
+          # comments 배열을 GitHub API 형식으로 변환
+          COMMENTS=$(jq -c '[.comments[] | {path: .path, line: .line, body: .body}]' /tmp/review.json)
+
+          # PR review 생성 (인라인 코멘트 + 요약)
+          jq -n \
+            --arg commit_id "$COMMIT_SHA" \
+            --arg body "$SUMMARY" \
+            --argjson comments "$COMMENTS" \
+            '{
+              commit_id: $commit_id,
+              body: $body,
+              event: "COMMENT",
+              comments: $comments
+            }' | gh api "repos/${REPO}/pulls/${PR_NUMBER}/reviews" \
+              --input - \
+              --method POST
+
+          echo "Review posted successfully!"
