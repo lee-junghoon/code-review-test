@@ -26,6 +26,7 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
           prompt: |
             code_review_guide.md 파일을 읽고 그 기준에 따라 이 PR을 리뷰해줘.
